@@ -1,10 +1,8 @@
 import React, { useContext, useState, useEffect } from "react";
 import { EquipmentContext } from "../context/EquipmentContext.jsx";
-import { ThemeContext } from "../context/ThemeContext.jsx";
 
 const BookingCalendar = () => {
 	const { equipment, bookings, addBooking } = useContext(EquipmentContext);
-	const { darkMode } = useContext(ThemeContext);
 
 	const [bookingDate, setBookingDate] = useState("");
 	const [selectedEquipment, setSelectedEquipment] = useState([]);

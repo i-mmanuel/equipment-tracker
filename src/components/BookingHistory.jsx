@@ -13,15 +13,17 @@ const BookingHistory = () => {
 	const [equipmentForDate, setEquipmentForDate] = useState({});
 
 	// Filter bookings based on selected filter and search query
-	const filteredBookings = bookings.filter(booking => {
-		const matchesFilter = filter === "all" || booking.status === filter;
-		const matchesSearch =
-			searchQuery === "" ||
-			booking.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			getEquipmentNames(booking.equipmentIds).toLowerCase().includes(searchQuery.toLowerCase());
+	const filteredBookings = React.useMemo(() => {
+		return bookings.filter(booking => {
+			const matchesFilter = filter === "all" || booking.status === filter;
+			const matchesSearch =
+				searchQuery === "" ||
+				booking.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				getEquipmentNames(booking.equipmentIds).toLowerCase().includes(searchQuery.toLowerCase());
 
-		return matchesFilter && matchesSearch;
-	});
+			return matchesFilter && matchesSearch;
+		});
+	}, [bookings, filter, searchQuery, equipment]);
 
 	// Extract unique booking dates and sort them (newest first)
 	useEffect(() => {
