@@ -36,7 +36,7 @@ export class EnhancedCSVExporter {
       const childCount = item.children ? item.children.length : 0;
       const hierarchyLevel = this.getHierarchyLevel(item);
       
-      // Add visual indentation to item name based on hierarchy level (no emojis)
+      // Add visual indentation to item name based on hierarchy level (consistent with settings)
       const indentPrefix = '  '.repeat(hierarchyLevel); // Two spaces per level
       let displayName;
       
@@ -104,9 +104,14 @@ export class EnhancedCSVExporter {
 
       const hierarchyLevel = this.getHierarchyLevel(item);
       const indentPrefix = '  '.repeat(hierarchyLevel);
-      const displayName = hierarchyLevel > 0 
-        ? `${indentPrefix}└─ ${item.name}` 
-        : item.name;
+      let displayName;
+      
+      if (hierarchyLevel === 0) {
+        const childCount = item.children ? item.children.length : 0;
+        displayName = childCount > 0 ? `${item.name} [${childCount} components]` : item.name;
+      } else {
+        displayName = `${indentPrefix}└─ ${item.name}`;
+      }
 
       return {
         Equipment_ID: `EQ${String(index + 1).padStart(3, '0')}`,
@@ -228,19 +233,18 @@ export class EnhancedCSVExporter {
         ? this.equipmentData.find(eq => eq.id === item.parentId)
         : null;
       
-      // Create visual tree structure without emojis
+      // Create visual tree structure consistent with settings
       let displayName;
       if (hierarchyLevel === 0) {
         // Parent items
         const childCount = item.children ? item.children.length : 0;
         displayName = childCount > 0 
-          ? `[PARENT] ${item.name} (${childCount} components)`
-          : `[PARENT] ${item.name}`;
+          ? `${item.name} [${childCount} components]`
+          : item.name;
       } else {
         // Child items with tree structure
-        const indent = '  '.repeat(hierarchyLevel - 1);
-        const connector = '├─ ';
-        displayName = `${indent}${connector}[COMPONENT] ${item.name}`;
+        const indent = '  '.repeat(hierarchyLevel);
+        displayName = `${indent}└─ ${item.name}`;
       }
 
       return {
