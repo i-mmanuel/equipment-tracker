@@ -36,7 +36,7 @@ export class EnhancedCSVExporter {
       const childCount = item.children ? item.children.length : 0;
       const hierarchyLevel = this.getHierarchyLevel(item);
       
-      // Add visual indentation to item name based on hierarchy level
+      // Add visual indentation to item name based on hierarchy level (no emojis)
       const indentPrefix = '  '.repeat(hierarchyLevel); // Two spaces per level
       let displayName;
       
@@ -207,7 +207,7 @@ export class EnhancedCSVExporter {
     return Papa.unparse({ fields: headers, data: formattedData });
   }
 
-  // Export hierarchical structure with visual nesting
+  // Export hierarchical structure with visual nesting (no emojis)
   exportHierarchicalStructure() {
     const headers = [
       'Equipment_Structure',
@@ -228,19 +228,19 @@ export class EnhancedCSVExporter {
         ? this.equipmentData.find(eq => eq.id === item.parentId)
         : null;
       
-      // Create visual tree structure
+      // Create visual tree structure without emojis
       let displayName;
       if (hierarchyLevel === 0) {
         // Parent items
         const childCount = item.children ? item.children.length : 0;
         displayName = childCount > 0 
-          ? `📦 ${item.name} (${childCount} components)`
-          : `📦 ${item.name}`;
+          ? `[PARENT] ${item.name} (${childCount} components)`
+          : `[PARENT] ${item.name}`;
       } else {
         // Child items with tree structure
         const indent = '  '.repeat(hierarchyLevel - 1);
         const connector = '├─ ';
-        displayName = `${indent}${connector}🔧 ${item.name}`;
+        displayName = `${indent}${connector}[COMPONENT] ${item.name}`;
       }
 
       return {

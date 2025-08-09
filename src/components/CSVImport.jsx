@@ -148,7 +148,9 @@ const CSVImport = ({ onImportComplete }) => {
 								let cleaned = name
 									.replace(/^[\s\t]*/, '') // Remove leading whitespace
 									.replace(/^[├└]─\s*/, '') // Remove tree connectors
-									.replace(/^[📦🔧]\s*/, '') // Remove icons
+									.replace(/^[📦🔧]\s*/, '') // Remove emoji icons
+									.replace(/^\[PARENT\]\s*/, '') // Remove text parent indicator
+									.replace(/^\[COMPONENT\]\s*/, '') // Remove text component indicator
 									.replace(/\s*\[\d+\s*components?\]$/, '') // Remove component count
 									.replace(/\s*\(\d+\s*components?\)$/, '') // Remove component count (parentheses)
 									.trim();
@@ -157,19 +159,25 @@ const CSVImport = ({ onImportComplete }) => {
 							};
 
 							// Helper function to extract parent info from Parent_Item column
-							const extractParentSerialNumber = (parentItemText) => {
+							const extractParentIdentifier = (parentItemText) => {
 								if (!parentItemText || parentItemText.toLowerCase() === 'none' || parentItemText.toLowerCase() === 'top level') {
 									return null;
 								}
 								
 								// Extract serial number from format: "Parent Name (SERIAL-123)"
 								const match = parentItemText.match(/\(([^)]+)\)$/);
-								return match ? match[1] : parentItemText;
+								if (match) {
+									return { type: 'serial', value: match[1] };
+								}
+								
+								// Otherwise, it's just a parent name
+								return { type: 'name', value: parentItemText };
 							};
 
 							// First pass: Create all equipment items without relationships
 							const tempEquipmentMap = new Map();
 							const serialToIdMap = new Map();
+							const nameToIdMap = new Map();
 
 							data.forEach((item, index) => {
 								try {
@@ -201,6 +209,7 @@ const CSVImport = ({ onImportComplete }) => {
 									});
 									
 									serialToIdMap.set(serialNumber, equipmentId);
+									nameToIdMap.set(cleanedName.toLowerCase(), equipmentId);
 									importedCount++;
 
 								} catch (err) {
@@ -213,10 +222,31 @@ const CSVImport = ({ onImportComplete }) => {
 								const { equipment, parentInfo } = data;
 								
 								if (parentInfo) {
-									const parentSerialNumber = extractParentSerialNumber(parentInfo);
+									const parentIdentifier = extractParentIdentifier(parentInfo);
 									
-									if (parentSerialNumber) {
-										const parentId = serialToIdMap.get(parentSerialNumber);
+									if (parentIdentifier) {
+										let parentId = null;
+										
+										if (parentIdentifier.type === 'serial') {
+											parentId = serialToIdMap.get(parentIdentifier.value);
+										} else if (parentIdentifier.type === 'name') {
+											// First try exact match
+											parentId = nameToIdMap.get(parentIdentifier.value.toLowerCase());
+											
+											// If no exact match, try fuzzy matching
+											if (!parentId) {
+												const parentName = parentIdentifier.value.toLowerCase();
+												for (const [equipmentName, equipmentId] of nameToIdMap.entries()) {
+													// Check if the parent name is contained in the equipment name
+													// or if the equipment name is contained in the parent name
+													if (equipmentName.includes(parentName) || parentName.includes(equipmentName)) {
+														parentId = equipmentId;
+														console.log(`Fuzzy match found: "${parentIdentifier.value}" matched to "${equipmentName}"`);
+														break;
+													}
+												}
+											}
+										}
 										
 										if (parentId && tempEquipmentMap.has(parentId)) {
 											// Set parent relationship
@@ -228,13 +258,21 @@ const CSVImport = ({ onImportComplete }) => {
 												parentEquipment.children.push(equipmentId);
 											}
 										} else {
-											console.warn(`Parent not found for equipment ${equipment.name}: ${parentSerialNumber}`);
+											console.warn(`Parent not found for equipment ${equipment.name}: ${parentIdentifier.value} (${parentIdentifier.type})`);
+											// Check if we can find a similar name match
+											const possibleMatches = Array.from(nameToIdMap.keys()).filter(name => 
+												name.includes(parentIdentifier.value.toLowerCase()) || 
+												parentIdentifier.value.toLowerCase().includes(name)
+											);
+											if (possibleMatches.length > 0) {
+												console.warn(`Possible matches:`, possibleMatches);
+											}
 										}
 									}
 								}
 								
 								equipmentList.push(equipment);
-								setProgress(Math.round((importedCount / tempEquipmentMap.size) * 100));
+								setProgress(Math.round((equipmentList.length / tempEquipmentMap.size) * 100));
 							}
 
 							// Save the updated equipment list to localStorage
