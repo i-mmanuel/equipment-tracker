@@ -12,9 +12,10 @@ const BookingCalendar = () => {
 	const [expandedGroups, setExpandedGroups] = useState({});
 	const [showBookingForm, setShowBookingForm] = useState(true);
 
-	// Group equipment by type
+	// Group equipment by type - only show parent equipment (items without parentId)
 	useEffect(() => {
-		const grouped = equipment.reduce((acc, item) => {
+		const parentEquipment = equipment.filter(item => !item.parentId);
+		const grouped = parentEquipment.reduce((acc, item) => {
 			const type = item.type || "Uncategorized";
 			if (!acc[type]) {
 				acc[type] = [];
@@ -89,10 +90,25 @@ const BookingCalendar = () => {
 			return;
 		}
 
-		// Create new booking
+		// Get all equipment IDs including children of selected parent equipment
+		const allEquipmentIds = [];
+		
+		selectedEquipment.forEach(parentId => {
+			// Add the parent equipment
+			allEquipmentIds.push(parentId);
+			
+			// Add all child equipment
+			const childrenIds = equipment
+				.filter(item => item.parentId === parentId)
+				.map(child => child.id);
+			
+			allEquipmentIds.push(...childrenIds);
+		});
+
+		// Create new booking with both parent and child equipment
 		const newBooking = {
 			date: bookingDate,
-			equipmentIds: selectedEquipment,
+			equipmentIds: allEquipmentIds,
 			name: bookingName,
 			notes: bookingNotes,
 			status: "requested",
@@ -108,13 +124,26 @@ const BookingCalendar = () => {
 	};
 
 	// Check if equipment is already booked for the selected date
+	// This includes checking if any child components are booked
 	const isEquipmentBooked = equipmentId => {
 		if (!bookingDate) return false;
+
+		// Get the equipment item and its children
+		const equipmentItem = equipment.find(item => item.id === equipmentId);
+		if (!equipmentItem) return false;
+
+		// Get all child equipment IDs
+		const childrenIds = equipment
+			.filter(item => item.parentId === equipmentId)
+			.map(child => child.id);
+
+		// Check if the parent or any of its children are booked
+		const allRelatedIds = [equipmentId, ...childrenIds];
 
 		return bookings.some(
 			booking =>
 				booking.date === bookingDate &&
-				booking.equipmentIds.includes(equipmentId) &&
+				booking.equipmentIds.some(bookedId => allRelatedIds.includes(bookedId)) &&
 				["requested", "dispatched", "packed"].includes(booking.status)
 		);
 	};
@@ -293,7 +322,12 @@ const BookingCalendar = () => {
 				<div className={`md:col-span-2 ${showBookingForm ? "hidden md:block" : ""}`}>
 					<div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
 						<div className="flex justify-between items-center p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
-							<h2 className="text-lg font-medium">Select Equipment</h2>
+							<div>
+								<h2 className="text-lg font-medium">Select Equipment</h2>
+								<p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+									Only parent equipment is shown for booking
+								</p>
+							</div>
 
 							{/* Mobile: Item count and done button */}
 							<div className="md:hidden flex items-center">
@@ -360,6 +394,14 @@ const BookingCalendar = () => {
 																		<p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
 																			SN: {item.serialNumber}
 																		</p>
+																		{(() => {
+																			const childrenCount = equipment.filter(child => child.parentId === item.id).length;
+																			return childrenCount > 0 && (
+																				<p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+																					Includes {childrenCount} component{childrenCount !== 1 ? 's' : ''}
+																				</p>
+																			);
+																		})()}
 																		{isBooked && (
 																			<p className="mt-1 text-xs text-red-600 dark:text-red-400">
 																				Already booked for this date
@@ -390,7 +432,7 @@ const BookingCalendar = () => {
 											d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
 										/>
 									</svg>
-									<p className="mt-2 text-sm">No equipment available. Please add equipment first.</p>
+									<p className="mt-2 text-sm">No parent equipment available. Please add parent equipment first.</p>
 								</div>
 							)
 						) : (

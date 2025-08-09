@@ -71,21 +71,31 @@ const CSVImport = ({ onImportComplete }) => {
 
 							const { data } = results;
 
-							// Check for required columns
-							const requiredColumns = ["name", "type", "serialNumber"];
+							// Check for required columns (flexible for different export formats)
 							const headers = Object.keys(data[0] || {});
-
-							const missingColumns = requiredColumns.filter(
-								col => !headers.map(h => h.toLowerCase()).includes(col.toLowerCase())
+							const lowerHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z]/g, ''));
+							
+							// Required: some form of name, type, and serial number
+							const hasName = lowerHeaders.some(h => 
+								h.includes('name') || h.includes('equipmentstructure')
+							);
+							const hasType = lowerHeaders.includes('type');
+							const hasSerial = lowerHeaders.some(h => 
+								h.includes('serial') || h.includes('serialnumber')
 							);
 
-							if (missingColumns.length > 0) {
-								setError(`Missing required columns: ${missingColumns.join(", ")}`);
+							const missingFields = [];
+							if (!hasName) missingFields.push('name/item_name/equipment_structure');
+							if (!hasType) missingFields.push('type');
+							if (!hasSerial) missingFields.push('serialNumber/serial');
+
+							if (missingFields.length > 0) {
+								setError(`Missing required columns: ${missingFields.join(", ")}`);
 								setImporting(false);
 								return;
 							}
 
-							// SIMPLIFIED APPROACH: Store all equipment in localStorage directly
+							// Enhanced import handling for hierarchical CSV formats
 							let importedCount = 0;
 							const errors = [];
 
@@ -93,50 +103,139 @@ const CSVImport = ({ onImportComplete }) => {
 							const storedEquipment = localStorage.getItem("equipment");
 							let equipmentList = storedEquipment ? JSON.parse(storedEquipment) : [];
 
-							// Process each item in the CSV
+							// Detect CSV format type
+							const isHierarchicalFormat = headers.some(h => 
+								h.toLowerCase().includes('equipment_structure') || 
+								h.toLowerCase().includes('item_name') ||
+								h.toLowerCase().includes('parent_item')
+							);
+
+							// Create mapping for different CSV formats
+							const createColumnMap = (headers) => {
+								const columnMap = {};
+								headers.forEach(header => {
+									const lowerHeader = header.toLowerCase().replace(/[^a-z]/g, '');
+									
+									// Name field variations
+									if (lowerHeader === "name" || lowerHeader === "itemname" || lowerHeader === "equipmentstructure") {
+										columnMap.name = header;
+									}
+									// Type field variations
+									if (lowerHeader === "type") columnMap.type = header;
+									// Serial number variations
+									if (lowerHeader === "serialnumber" || lowerHeader === "serial") columnMap.serialNumber = header;
+									// Condition variations
+									if (lowerHeader === "condition") columnMap.condition = header;
+									// Purchase date variations
+									if (lowerHeader === "purchasedate" || lowerHeader === "date") columnMap.purchaseDate = header;
+									// Notes variations
+									if (lowerHeader === "notes") columnMap.notes = header;
+									// Parent ID variations
+									if (lowerHeader === "parentid" || lowerHeader === "parent" || lowerHeader === "parentitem" || lowerHeader === "parentequipment") {
+										columnMap.parentId = header;
+									}
+								});
+								return columnMap;
+							};
+
+							const columnMap = createColumnMap(headers);
+
+							// Helper function to clean equipment names from visual formatting
+							const cleanEquipmentName = (name) => {
+								if (!name) return '';
+								
+								// Remove visual formatting symbols and indentation
+								let cleaned = name
+									.replace(/^[\s\t]*/, '') // Remove leading whitespace
+									.replace(/^[├└]─\s*/, '') // Remove tree connectors
+									.replace(/^[📦🔧]\s*/, '') // Remove icons
+									.replace(/\s*\[\d+\s*components?\]$/, '') // Remove component count
+									.replace(/\s*\(\d+\s*components?\)$/, '') // Remove component count (parentheses)
+									.trim();
+								
+								return cleaned;
+							};
+
+							// Helper function to extract parent info from Parent_Item column
+							const extractParentSerialNumber = (parentItemText) => {
+								if (!parentItemText || parentItemText.toLowerCase() === 'none' || parentItemText.toLowerCase() === 'top level') {
+									return null;
+								}
+								
+								// Extract serial number from format: "Parent Name (SERIAL-123)"
+								const match = parentItemText.match(/\(([^)]+)\)$/);
+								return match ? match[1] : parentItemText;
+							};
+
+							// First pass: Create all equipment items without relationships
+							const tempEquipmentMap = new Map();
+							const serialToIdMap = new Map();
+
 							data.forEach((item, index) => {
 								try {
-									// Map CSV columns to equipment object
-									const columnMap = {};
-									headers.forEach(header => {
-										const lowerHeader = header.toLowerCase();
-										if (lowerHeader === "name") columnMap.name = header;
-										if (lowerHeader === "type") columnMap.type = header;
-										if (lowerHeader === "serialnumber") columnMap.serialNumber = header;
-										if (lowerHeader === "condition") columnMap.condition = header;
-										if (lowerHeader === "purchasedate") columnMap.purchaseDate = header;
-										if (lowerHeader === "notes") columnMap.notes = header;
-									});
-
-									// Create equipment object with mapped values
-									const equipmentData = {
-										id: Date.now().toString() + index + Math.random().toString(36).substr(2, 5),
-										name: item[columnMap.name],
-										type: item[columnMap.type],
-										serialNumber: item[columnMap.serialNumber],
-										condition: columnMap.condition ? item[columnMap.condition] || "good" : "good",
-										purchaseDate: columnMap.purchaseDate
-											? item[columnMap.purchaseDate]
-											: new Date().toISOString().split("T")[0],
-										notes: columnMap.notes ? item[columnMap.notes] : "",
-									};
-
-									// Validate required fields
-									if (!equipmentData.name || !equipmentData.type || !equipmentData.serialNumber) {
-										errors.push(`Row ${index + 1}: Missing required fields`);
+									const cleanedName = cleanEquipmentName(item[columnMap.name]);
+									const serialNumber = item[columnMap.serialNumber];
+									
+									if (!cleanedName || !serialNumber) {
+										errors.push(`Row ${index + 1}: Missing required fields (name or serial number)`);
 										return;
 									}
 
-									// Add to our equipment list
-									equipmentList.push(equipmentData);
+									const equipmentId = Date.now().toString() + index + Math.random().toString(36).substr(2, 5);
+									
+									const equipmentData = {
+										id: equipmentId,
+										name: cleanedName,
+										type: item[columnMap.type] || 'General',
+										serialNumber: serialNumber,
+										condition: (columnMap.condition && item[columnMap.condition]) || "good",
+										purchaseDate: (columnMap.purchaseDate && item[columnMap.purchaseDate]) || new Date().toISOString().split("T")[0],
+										notes: (columnMap.notes && item[columnMap.notes]) || "",
+										parentId: null, // Will be set in second pass
+										children: [],
+									};
+
+									tempEquipmentMap.set(equipmentId, {
+										equipment: equipmentData,
+										parentInfo: item[columnMap.parentId] || null
+									});
+									
+									serialToIdMap.set(serialNumber, equipmentId);
 									importedCount++;
 
-									// Update progress
-									setProgress(Math.round(((index + 1) / data.length) * 100));
 								} catch (err) {
 									errors.push(`Row ${index + 1}: ${err.message}`);
 								}
 							});
+
+							// Second pass: Establish parent-child relationships
+							for (const [equipmentId, data] of tempEquipmentMap.entries()) {
+								const { equipment, parentInfo } = data;
+								
+								if (parentInfo) {
+									const parentSerialNumber = extractParentSerialNumber(parentInfo);
+									
+									if (parentSerialNumber) {
+										const parentId = serialToIdMap.get(parentSerialNumber);
+										
+										if (parentId && tempEquipmentMap.has(parentId)) {
+											// Set parent relationship
+											equipment.parentId = parentId;
+											
+											// Add to parent's children array
+											const parentEquipment = tempEquipmentMap.get(parentId).equipment;
+											if (!parentEquipment.children.includes(equipmentId)) {
+												parentEquipment.children.push(equipmentId);
+											}
+										} else {
+											console.warn(`Parent not found for equipment ${equipment.name}: ${parentSerialNumber}`);
+										}
+									}
+								}
+								
+								equipmentList.push(equipment);
+								setProgress(Math.round((importedCount / tempEquipmentMap.size) * 100));
+							}
 
 							// Save the updated equipment list to localStorage
 							localStorage.setItem("equipment", JSON.stringify(equipmentList));
@@ -185,8 +284,10 @@ const CSVImport = ({ onImportComplete }) => {
 					className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 dark:file:bg-gray-700 dark:file:text-gray-200 hover:file:bg-gray-200 dark:hover:file:bg-gray-600"
 				/>
 				<p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-					The CSV file must include columns for name, type, and serialNumber (required). Optional columns: condition,
-					purchaseDate, notes.
+					<strong>Basic Format:</strong> name, type, serialNumber (required). Optional: condition, purchaseDate, notes, parentId.
+				</p>
+				<p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+					<strong>Enhanced Import:</strong> Also supports hierarchical exports with visual formatting, Equipment_Structure, Item_Name, Parent_Item columns.
 				</p>
 			</div>
 

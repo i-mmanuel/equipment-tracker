@@ -1,7 +1,9 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { ThemeContext } from "../context/ThemeContext.jsx";
 import { EquipmentContext } from "../context/EquipmentContext.jsx";
 import CSVImport from "./CSVImport.jsx";
+import LogoShowcase from "./LogoShowcase.jsx";
+import { EnhancedCSVExporter, downloadCSV, getFormattedDate } from "../utils/csvExporter.js";
 
 const Settings = () => {
 	const { darkMode, toggleTheme } = useContext(ThemeContext);
@@ -9,6 +11,8 @@ const Settings = () => {
 	const [notifications, setNotifications] = useState(true);
 	const [emailNotifications, setEmailNotifications] = useState(false);
 	const [importSuccess, setImportSuccess] = useState(null);
+	const [showLogoShowcase, setShowLogoShowcase] = useState(false);
+	const [showExportDropdown, setShowExportDropdown] = useState(false);
 
 	const clearAllData = () => {
 		if (
@@ -36,6 +40,73 @@ const Settings = () => {
 		}, 5000);
 	};
 
+	// Handle export dropdown
+	const handleExportCSV = (exportType) => {
+		try {
+			const exporter = new EnhancedCSVExporter(equipment, bookings);
+			let csvContent = '';
+			let filename = '';
+			
+			switch (exportType) {
+				case 'inventory':
+					csvContent = exporter.exportMasterInventory();
+					filename = `equipment_hierarchical_inventory_${getFormattedDate()}.csv`;
+					break;
+				case 'structure':
+					csvContent = exporter.exportHierarchicalStructure();
+					filename = `equipment_hierarchical_structure_${getFormattedDate()}.csv`;
+					break;
+				case 'usage':
+					csvContent = exporter.exportUsageSummary();
+					filename = `equipment_usage_summary_${getFormattedDate()}.csv`;
+					break;
+				case 'flat':
+					// Legacy flat export
+					const headers = ["name", "type", "serialNumber", "condition", "purchaseDate", "notes", "parentId"];
+					let flatCsvContent = headers.join(",") + "\n";
+					equipment.forEach(item => {
+						const row = [
+							`"${(item.name || "").replace(/"/g, '""')}"`,
+							`"${(item.type || "").replace(/"/g, '""')}"`,
+							`"${(item.serialNumber || "").replace(/"/g, '""')}"`,
+							`"${(item.condition || "").replace(/"/g, '""')}"`,
+							`"${(item.purchaseDate || "").replace(/"/g, '""')}"`,
+							`"${(item.notes || "").replace(/"/g, '""')}"`,
+							`"${(item.parentId || "").replace(/"/g, '""')}"`,
+						];
+						flatCsvContent += row.join(",") + "\n";
+					});
+					csvContent = flatCsvContent;
+					filename = `equipment_flat_export_${getFormattedDate()}.csv`;
+					break;
+				default:
+					console.error('Unknown export type:', exportType);
+					return;
+			}
+			
+			downloadCSV(csvContent, filename);
+			setShowExportDropdown(false);
+			
+		} catch (error) {
+			console.error('Error exporting CSV:', error);
+			alert('Error exporting CSV. Please try again.');
+		}
+	};
+
+	// Close export dropdown when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event) => {
+			if (showExportDropdown && !event.target.closest('.relative')) {
+				setShowExportDropdown(false);
+			}
+		};
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [showExportDropdown]);
+
 	const SettingRow = ({ title, description, children }) => (
 		<div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4">
 			<div className="mb-2 sm:mb-0">
@@ -45,6 +116,23 @@ const Settings = () => {
 			<div className="sm:col-span-2">{children}</div>
 		</div>
 	);
+
+	// If showing logo showcase, render it instead of settings
+	if (showLogoShowcase) {
+		return (
+			<div>
+				<div className="p-4 md:p-6">
+					<button 
+						onClick={() => setShowLogoShowcase(false)}
+						className="mb-4 inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+					>
+						← Back to Settings
+					</button>
+				</div>
+				<LogoShowcase />
+			</div>
+		);
+	}
 
 	return (
 		<div className="p-4 md:p-6">
@@ -85,38 +173,60 @@ const Settings = () => {
 									>
 										Export Equipment (JSON)
 									</button>
-									<button
-										className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
-										onClick={() => {
-											const headers = ["name", "type", "serialNumber", "condition", "purchaseDate", "notes"];
-
-											// Create CSV content
-											let csvContent = headers.join(",") + "\n";
-
-											// Add each equipment as a row
-											equipment.forEach(item => {
-												const row = [
-													`"${(item.name || "").replace(/"/g, '""')}"`,
-													`"${(item.type || "").replace(/"/g, '""')}"`,
-													`"${(item.serialNumber || "").replace(/"/g, '""')}"`,
-													`"${(item.condition || "").replace(/"/g, '""')}"`,
-													`"${(item.purchaseDate || "").replace(/"/g, '""')}"`,
-													`"${(item.notes || "").replace(/"/g, '""')}"`,
-												];
-												csvContent += row.join(",") + "\n";
-											});
-
-											// Create and download the file
-											const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-											const url = URL.createObjectURL(blob);
-											const a = document.createElement("a");
-											a.href = url;
-											a.download = "equipment_data.csv";
-											a.click();
-										}}
-									>
-										Export Equipment (CSV)
-									</button>
+									<div className="relative">
+										<button
+											className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+											onClick={() => setShowExportDropdown(!showExportDropdown)}
+										>
+											Export Equipment (CSV)
+											<svg className="ml-2 -mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+												<path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+											</svg>
+										</button>
+										
+										{showExportDropdown && (
+											<div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+												<div className="py-1">
+													<button
+														onClick={() => handleExportCSV('inventory')}
+														className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+													>
+														<svg className="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+														</svg>
+														Hierarchical Inventory (Recommended)
+													</button>
+													<button
+														onClick={() => handleExportCSV('structure')}
+														className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+													>
+														<svg className="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+														</svg>
+														Visual Tree Structure
+													</button>
+													<button
+														onClick={() => handleExportCSV('usage')}
+														className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+													>
+														<svg className="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+														</svg>
+														Usage Summary
+													</button>
+													<button
+														onClick={() => handleExportCSV('flat')}
+														className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-600"
+													>
+														<svg className="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+														</svg>
+														Legacy Flat Format
+													</button>
+												</div>
+											</div>
+										)}
+									</div>
 								</div>
 							</div>
 						</div>
@@ -201,6 +311,22 @@ const Settings = () => {
 									</div>
 								</SettingRow>
 							</div>
+						</div>
+
+						{/* Logo Showcase */}
+						<div className="px-4 py-5 sm:p-6">
+							<h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">Brand & Logo</h3>
+							
+							<SettingRow title="Logo Variations" description="View all available logo designs for your application">
+								<div className="flex justify-end">
+									<button
+										onClick={() => setShowLogoShowcase(true)}
+										className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+									>
+										View Logo Showcase
+									</button>
+								</div>
+							</SettingRow>
 						</div>
 
 						{/* About */}

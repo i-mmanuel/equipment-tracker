@@ -3,6 +3,7 @@ import EquipmentList from './components/EquipmentList.jsx';
 import BookingCalendar from './components/BookingCalendar.jsx';
 import BookingHistory from './components/BookingHistory.jsx';
 import Settings from './components/Settings.jsx';
+import { ProfessionalLogo } from './components/BrandLogos.jsx';
 import { ThemeProvider, ThemeContext } from './context/ThemeContext.jsx';
 import { EquipmentProvider } from './context/EquipmentContext.jsx';
 
@@ -75,18 +76,7 @@ const AppContent = () => {
             />
           </svg>
         </button>
-        <div className="flex items-center gap-2 font-bold">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="24"
-            height="24"
-            className="fill-current text-gray-900 dark:text-white"
-          >
-            <path d="M21.5 5h-19A2.5 2.5 0 000 7.5v11A2.5 2.5 0 002.5 21h19a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0021.5 5zM8 18H3v-2h5v2zm0-4H3v-2h5v2zm13 4h-9v-2h9v2zm0-4h-9v-2h9v2z"></path>
-          </svg>
-          My Logistics
-        </div>
+        <ProfessionalLogo size="md" variant="compact" />
         <button
           onClick={toggleTheme}
           className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
@@ -136,18 +126,7 @@ const AppContent = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 font-bold flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="24"
-                  height="24"
-                  className="fill-current text-gray-900 dark:text-white"
-                >
-                  <path d="M21.5 5h-19A2.5 2.5 0 000 7.5v11A2.5 2.5 0 002.5 21h19a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0021.5 5zM8 18H3v-2h5v2zm0-4H3v-2h5v2zm13 4h-9v-2h9v2zm0-4h-9v-2h9v2z"></path>
-                </svg>
-                My Logistics
-              </div>
+              <ProfessionalLogo size="md" variant="compact" />
               <button
                 onClick={toggleSidebar}
                 className="text-gray-400 hover:text-gray-500"
@@ -294,17 +273,8 @@ const AppContent = () => {
 
       {/* Desktop Sidebar (always visible on large screens) */}
       <aside className="hidden lg:flex w-64 flex-col border-r border-gray-200 dark:border-gray-700 h-screen fixed">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 font-bold flex items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="24"
-            height="24"
-            className="fill-current text-gray-900 dark:text-white"
-          >
-            <path d="M21.5 5h-19A2.5 2.5 0 000 7.5v11A2.5 2.5 0 002.5 21h19a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0021.5 5zM8 18H3v-2h5v2zm0-4H3v-2h5v2zm13 4h-9v-2h9v2zm0-4h-9v-2h9v2z"></path>
-          </svg>
-          My Logistics
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <ProfessionalLogo size="lg" variant="full" />
         </div>
 
         <nav className="flex-1">

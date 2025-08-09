@@ -3,7 +3,7 @@ import { EquipmentContext } from "../context/EquipmentContext.jsx";
 import { ThemeContext } from "../context/ThemeContext.jsx";
 
 const EquipmentForm = ({ editingId, onClose }) => {
-	const { addEquipment, updateEquipment, equipment } = useContext(EquipmentContext);
+	const { addEquipment, updateEquipment, equipment, canHaveParent } = useContext(EquipmentContext);
 	const { darkMode } = useContext(ThemeContext);
 
 	// Default form state
@@ -14,14 +14,23 @@ const EquipmentForm = ({ editingId, onClose }) => {
 		condition: "good",
 		purchaseDate: "",
 		notes: "",
+		parentId: "",
 	};
 
 	const [formData, setFormData] = useState(initialState);
 	const [customType, setCustomType] = useState("");
 	const [isCustomType, setIsCustomType] = useState(false);
 	const [availableTypes, setAvailableTypes] = useState([]);
+	const [availableParents, setAvailableParents] = useState([]);
 
-	// Extract unique equipment types
+	// Generate a unique serial number
+	const generateSerialNumber = () => {
+		const timestamp = Date.now().toString(36).toUpperCase();
+		const randomPart = Math.random().toString(36).substr(2, 4).toUpperCase();
+		return `SN-${timestamp}-${randomPart}`;
+	};
+
+	// Extract unique equipment types and available parents
 	useEffect(() => {
 		const types = equipment
 			.map(item => item.type)
@@ -30,7 +39,36 @@ const EquipmentForm = ({ editingId, onClose }) => {
 			.sort(); // Sort alphabetically
 
 		setAvailableTypes(types);
-	}, [equipment]);
+
+		// Get available parents - filter by type compatibility and prevent circular dependencies
+		const potentialParents = equipment.filter(item => {
+			// Prevent circular dependencies (item can't be its own parent or descendant)
+			if (editingId && !canHaveParent(editingId, item.id)) {
+				return false;
+			}
+			
+			// Exclude the item being edited from being its own parent
+			if (editingId && item.id === editingId) {
+				return false;
+			}
+			
+			// Type filtering: only show items that match the current equipment's type
+			// This applies to both editing existing equipment and creating new equipment
+			if (formData.type && item.type) {
+				return item.type === formData.type;
+			}
+			
+			// If no type is selected yet (new equipment), don't show any parents
+			// This encourages users to select a type first
+			if (!formData.type) {
+				return false;
+			}
+			
+			return true;
+		});
+
+		setAvailableParents(potentialParents);
+	}, [equipment, editingId, canHaveParent, formData.type]);
 
 	// If editing, populate form with equipment data
 	useEffect(() => {
@@ -43,6 +81,14 @@ const EquipmentForm = ({ editingId, onClose }) => {
 					setIsCustomType(true);
 					setCustomType(equipmentToEdit.type);
 				}
+			}
+		} else {
+			// Auto-generate serial number for new equipment (but only if it's empty)
+			if (!formData.serialNumber) {
+				setFormData(prevData => ({
+					...prevData,
+					serialNumber: generateSerialNumber()
+				}));
 			}
 		}
 	}, [editingId, equipment, availableTypes]);
@@ -91,7 +137,12 @@ const EquipmentForm = ({ editingId, onClose }) => {
 			addEquipment(formData);
 		}
 
-		setFormData(initialState);
+		// Reset form with a new auto-generated serial number for the next item
+		const resetState = {
+			...initialState,
+			serialNumber: generateSerialNumber()
+		};
+		setFormData(resetState);
 		setIsCustomType(false);
 		setCustomType("");
 		onClose();
@@ -173,15 +224,31 @@ const EquipmentForm = ({ editingId, onClose }) => {
 							<label htmlFor="serialNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
 								Serial Number
 							</label>
-							<input
-								type="text"
-								id="serialNumber"
-								name="serialNumber"
-								className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-								value={formData.serialNumber}
-								onChange={handleChange}
-								required
-							/>
+							<div className="flex gap-2">
+								<input
+									type="text"
+									id="serialNumber"
+									name="serialNumber"
+									className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+									value={formData.serialNumber}
+									onChange={handleChange}
+									placeholder="Auto-generated serial number"
+									required
+								/>
+								<button
+									type="button"
+									onClick={() => setFormData(prev => ({...prev, serialNumber: generateSerialNumber()}))}
+									className="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+									title="Generate new serial number"
+								>
+									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+									</svg>
+								</button>
+							</div>
+							<p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+								Serial number is auto-generated but can be edited manually
+							</p>
 						</div>
 
 						<div>
@@ -216,6 +283,38 @@ const EquipmentForm = ({ editingId, onClose }) => {
 								<option value="poor">Poor</option>
 								<option value="needs-repair">Needs Repair</option>
 							</select>
+						</div>
+
+						<div>
+							<label htmlFor="parentId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+								Parent Equipment (Optional)
+							</label>
+							<select
+								id="parentId"
+								name="parentId"
+								className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+								value={formData.parentId || ""}
+								onChange={handleChange}
+							>
+								<option value="">No parent - Top level item</option>
+								{availableParents.length === 0 && formData.type ? (
+									<option value="" disabled>
+										No {formData.type} equipment available as parent
+									</option>
+								) : (
+									availableParents.map(parent => (
+										<option key={parent.id} value={parent.id}>
+											{parent.name} ({parent.type})
+										</option>
+									))
+								)}
+							</select>
+							<p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+								{!formData.type 
+									? "Select a type first to see compatible parent equipment"
+									: `Select a parent to make this item a component of another ${formData.type} equipment`
+								}
+							</p>
 						</div>
 
 						<div>
